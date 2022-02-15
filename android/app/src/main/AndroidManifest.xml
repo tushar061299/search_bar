@@ -1,4 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" 
     package="com.example.search_bar">
    <application
         android:label="search_bar"
@@ -36,6 +36,7 @@
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
             android:name="flutterEmbedding"
-            android:value="2" />
+            android:value="2" />   
     </application>
+    <uses-permission android:name="android.permission.INTERNET"/> 
 </manifest>

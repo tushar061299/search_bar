@@ -12,13 +12,25 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final String apiurl = "https://randomuser.me/api/?results=100";
 
-  List<dynamic> _users = [];
+  String searchValue = '';
 
+  List<dynamic> _users = [];
+  List<dynamic> _foundUsers = [];
+  final List<bool> _selected = List.generate(100, (i) => false);
+
+  //Fetching Data From Api
   void fetchUsers() async {
     var response = await http.get(Uri.parse(apiurl));
     setState(() {
       _users = json.decode(response.body)['results'];
+      _foundUsers = _users;
     });
+
+    for (int i = 0; i < _users.length; i++) {
+      _foundUsers[i]['name'] = _name(_users[i]);
+      _foundUsers[i]['gender'] = _gender(_users[i]);
+      _foundUsers[i]['location'] = _location(_users[i]);
+    }
   }
 
   String _name(dynamic user) {
@@ -37,21 +49,77 @@ class _HomePageState extends State<HomePage> {
     return user['gender'];
   }
 
-  Widget _buildList() {
-    return RefreshIndicator(
-      child: ListView.builder(
-        padding: const EdgeInsets.all(6),
-        itemCount: _users.length,
-        itemBuilder: (BuildContext context, int index) {
-          return ListTile(
-            title: Text(_name(_users[index])),
-            subtitle: Text(_location(_users[index])),
-            trailing: Text(_gender(_users[index])),
-          );
-        },
-      ),
-      onRefresh: _getData,
-    );
+  //Highlighting The Searched Word
+
+  List<TextSpan> highlightOccurrences(String source, String query) {
+    // ignore: unnecessary_null_comparison
+    if (query == null || query.isEmpty) {
+      return <TextSpan>[TextSpan(text: source)];
+    }
+
+    final List<Match> matches = <Match>[];
+    for (final String token in query.trim().toLowerCase().split(' ')) {
+      matches.addAll(token.allMatches(source.toLowerCase()));
+    }
+
+    if (matches.isEmpty) {
+      return <TextSpan>[TextSpan(text: source)];
+    }
+    matches.sort((Match a, Match b) => a.start.compareTo(b.start));
+
+    int lastMatchEnd = 0;
+    final List<TextSpan> children = <TextSpan>[];
+    const Color matchColor = Colors.blue;
+    for (final Match match in matches) {
+      if (match.end <= lastMatchEnd) {
+        // already matched -> ignore
+      } else if (match.start <= lastMatchEnd) {
+        children.add(TextSpan(
+          text: source.substring(lastMatchEnd, match.end),
+          style:
+              const TextStyle(fontWeight: FontWeight.bold, color: matchColor),
+        ));
+      } else {
+        children.add(TextSpan(
+          text: source.substring(lastMatchEnd, match.start),
+        ));
+
+        children.add(TextSpan(
+          text: source.substring(match.start, match.end),
+          style:
+              const TextStyle(fontWeight: FontWeight.bold, color: matchColor),
+        ));
+      }
+
+      if (lastMatchEnd < match.end) {
+        lastMatchEnd = match.end;
+      }
+    }
+
+    if (lastMatchEnd < source.length) {
+      children.add(TextSpan(
+        text: source.substring(lastMatchEnd, source.length),
+      ));
+    }
+
+    return children;
+  }
+
+  // For Searching
+
+  void _filter(String value) {
+    searchValue = value;
+    List<dynamic> suggestionList = [];
+    setState(() {
+      suggestionList = value.isEmpty
+          ? _users
+          : _users
+              .where((element) =>
+                  element['name'].toLowerCase().contains(value.toLowerCase()))
+              .toList();
+
+      _foundUsers = suggestionList;
+    });
   }
 
   Future<void> _getData() async {
@@ -63,8 +131,8 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     // TODO: implement initState
-    super.initState();
     fetchUsers();
+    super.initState();
   }
 
   @override
@@ -89,26 +157,18 @@ class _HomePageState extends State<HomePage> {
                         borderRadius: BorderRadius.circular(0.0),
                       ),
                       child: Padding(
-                        // ignore: prefer_const_constructors
-                        padding: EdgeInsets.all(0.0),
+                        padding: const EdgeInsets.all(0.0),
                         child: TextField(
-                          // ignore: prefer_const_constructors
-                          decoration: InputDecoration(
+                          onChanged: (value) => _filter(value),
+                          decoration: const InputDecoration(
                             hintText: "Search user by ID, address, name..",
-                            // ignore: prefer_const_constructors
                             hintStyle: TextStyle(
                               fontSize: 18,
                               color: Colors.grey,
                               fontStyle: FontStyle.normal,
                             ),
-                            // ignore: prefer_const_constructors
-                            prefixIcon:
-                                // ignore: prefer_const_constructors
-                                Icon(Icons.search, color: Colors.grey),
+                            prefixIcon: Icon(Icons.search, color: Colors.grey),
                           ),
-                          onChanged: (value) {
-                            //_filter(value);
-                          },
                         ),
                       ),
                     ),
@@ -120,7 +180,37 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
       body: Container(
-        child: _buildList(),
+        child: _foundUsers.isNotEmpty
+            ? RefreshIndicator(
+                child: ListView.builder(
+                  padding: const EdgeInsets.all(6),
+                  itemCount: _foundUsers.length,
+                  itemBuilder: (BuildContext context, int index) {
+                    return ListTile(
+                      title: RichText(
+                        text: TextSpan(
+                          children: highlightOccurrences(
+                              _foundUsers[index]['name'], searchValue),
+                          style: const TextStyle(
+                              color: Colors.black, fontSize: 18),
+                        ),
+                      ),
+                      subtitle: Text(_foundUsers[index]['location']),
+                      trailing: Text(_foundUsers[index]['gender']),
+                      tileColor: _selected[index] ? Colors.yellow[200] : null,
+                      onTap: () =>
+                          setState(() => _selected[index] = !_selected[index]),
+                    );
+                  },
+                ),
+                onRefresh: _getData,
+              )
+            : const Center(
+                child: Text(
+                  'No results found',
+                  style: TextStyle(fontSize: 24),
+                ),
+              ),
       ),
     );
   }
